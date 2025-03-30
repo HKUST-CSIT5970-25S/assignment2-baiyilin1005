@@ -42,8 +42,8 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			Mapper<LongWritable, Text, Text, HashMapStringIntWritable> {
 
 		// Reuse objects to save overhead of object creation.
-		private static final Text KEY = new Text();
-		private static final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
+		private final Text KEY = new Text();
+		private final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
 
 		@Override
 		public void map(LongWritable key, Text value, Context context)
@@ -54,6 +54,27 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+			if (words.length > 1) {
+                String prev = words[0];
+                for (int i = 1; i < words.length; i++) {
+                    String curr = words[i];
+                    if (curr.length() == 0) continue;
+
+                    KEY.set(prev);
+                    STRIPE.clear();
+                    STRIPE.increment(curr);
+                    context.write(KEY, STRIPE);
+
+                    KEY.set(prev);
+                    STRIPE.clear();
+                    STRIPE.increment("*");
+                    context.write(KEY, STRIPE);
+
+                    prev = curr;
+                }
+            }
+
 		}
 	}
 
@@ -64,9 +85,9 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			Reducer<Text, HashMapStringIntWritable, PairOfStrings, FloatWritable> {
 
 		// Reuse objects.
-		private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
-		private final static PairOfStrings BIGRAM = new PairOfStrings();
-		private final static FloatWritable FREQ = new FloatWritable();
+		private final HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
+		private final PairOfStrings BIGRAM = new PairOfStrings();
+		private final FloatWritable FREQ = new FloatWritable();
 
 		@Override
 		public void reduce(Text key,
@@ -75,6 +96,40 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+			SUM_STRIPES.clear();
+            float total = 0
+
+            for (HashMapStringIntWritable stripe : stripes) {
+                for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
+                    String right = entry.getKey();
+                    int count = entry.getValue();
+                    
+                    if ("*".equals(right)) {
+                        total += count; 
+                    } else {
+         
+                        SUM_STRIPES.increment(right, count);
+                    }
+                }
+            }
+
+            if (total > 0) {
+                for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+                    String right = entry.getKey();
+                    float count = entry.getValue();
+                    float relativeFreq = count / total;
+                    
+                    BIGRAM.set(key.toString(), right);
+                    FREQ.set(relativeFreq);
+                    context.write(BIGRAM, FREQ);
+                }
+                
+                BIGRAM.set(key.toString(), "");
+                FREQ.set(total);
+                context.write(BIGRAM, FREQ);
+            }
+
 		}
 	}
 
@@ -94,6 +149,17 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+			SUM_STRIPES.clear();
+            
+            for (HashMapStringIntWritable stripe : stripes) {
+                for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
+                    SUM_STRIPES.increment(entry.getKey(), entry.getValue());
+                }
+            }
+            
+            context.write(key, SUM_STRIPES);
+			
 		}
 	}
 
